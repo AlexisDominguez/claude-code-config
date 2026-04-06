@@ -40,7 +40,10 @@ used_tokens=$(echo "$input" | jq -r '
 
 # Rate limits (only present for Claude.ai Pro/Max subscribers)
 rate_5h=$(echo "$input" | jq -r '.rate_limits.five_hour.used_percentage // empty')
+rate_5h_resets=$(echo "$input" | jq -r '.rate_limits.five_hour.resets_at // empty')
 rate_7d=$(echo "$input" | jq -r '.rate_limits.seven_day.used_percentage // empty')
+rate_7d_resets=$(echo "$input" | jq -r '.rate_limits.seven_day.resets_at // empty')
+now_epoch=$(date +%s)
 
 # --- Git branch with 5-second file cache ---
 # Use the cwd from the JSON input as the working directory
@@ -147,7 +150,17 @@ if [ -n "$rate_5h" ]; then
         yellow) rc_color="$COLOR_CTX_YELLOW" ;;
         *)      rc_color="$COLOR_CTX_GREEN"  ;;
     esac
-    output="${output} ${COLOR_SEP}|${RESET} ${DIM}5h:${RESET} ${rc_color}${rate_5h_display}%${RESET}"
+    # Calculate time remaining until 5h reset
+    time_5h=""
+    if [ -n "$rate_5h_resets" ]; then
+        remaining=$((rate_5h_resets - now_epoch))
+        if [ "$remaining" -gt 0 ]; then
+            hrs=$((remaining / 3600))
+            mins=$(((remaining % 3600) / 60))
+            time_5h=" ${hrs}h${mins}m"
+        fi
+    fi
+    output="${output} ${COLOR_SEP}|${RESET} ${DIM}5h:${RESET} ${rc_color}${rate_5h_display}%${RESET}${DIM}${time_5h}${RESET}"
 fi
 if [ -n "$rate_7d" ]; then
     rate_7d_display=$(printf '%.0f' "$rate_7d")
@@ -157,7 +170,22 @@ if [ -n "$rate_7d" ]; then
         yellow) rc_color="$COLOR_CTX_YELLOW" ;;
         *)      rc_color="$COLOR_CTX_GREEN"  ;;
     esac
-    output="${output} ${COLOR_SEP}|${RESET} ${DIM}7d:${RESET} ${rc_color}${rate_7d_display}%${RESET}"
+    # Calculate time remaining until 7d reset
+    time_7d=""
+    if [ -n "$rate_7d_resets" ]; then
+        remaining=$((rate_7d_resets - now_epoch))
+        if [ "$remaining" -gt 0 ]; then
+            days=$((remaining / 86400))
+            hrs=$(((remaining % 86400) / 3600))
+            mins=$(((remaining % 3600) / 60))
+            if [ "$days" -gt 0 ]; then
+                time_7d=" ${days}d${hrs}h"
+            else
+                time_7d=" ${hrs}h${mins}m"
+            fi
+        fi
+    fi
+    output="${output} ${COLOR_SEP}|${RESET} ${DIM}7d:${RESET} ${rc_color}${rate_7d_display}%${RESET}${DIM}${time_7d}${RESET}"
 fi
 
 printf "%b\n" "$output"
